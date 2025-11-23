@@ -83,5 +83,10 @@ Karena akun TradingView Basic dibatasi maksimal **2 Indikator**, gunakan alur ke
 
 ---
 
+## 🚀 Quick Links (Akses Cepat)
+
+* **📘 [SOP Trading Mingguan (Full Guide)](SOP_Trading_Mingguan.md)** *(Bisa jadi refeensi sebelum mulai trading - Inget Konsistensi adalah Kunci)*
+
+---
 ## ⚠️ Disclaimer
 Script ini dibuat sebagai alat bantu analisis (*Trading Assistant*). Segala keputusan keuntungan dan kerugian adalah tanggung jawab penuh pengguna. Selalu gunakan Money Management yang baik.
