@@ -42,9 +42,14 @@ Dashboard monitoring *real-time* untuk memantau 40 saham LQ45 sekaligus dalam sa
 Karena akun TradingView Basic dibatasi maksimal **2 Indikator**, gunakan alur kerja berikut:
 
 ### 📡 PHASE 1: Mode Radar (Scanning)
+
 **Setup Indikator:**
 1.  **Swing Reversal Pro** (Chart)
 2.  **The Hunter Screener** (Overlay)
+
+**Filter Saham "Kotor"**
+1.  **Filter seperti File Screenshot**
+2.  **Masukkan saham yang Analyst Ratingnya Buy/Strong Buy ke dalam Indikator The Hunter Screener**
 
 **Langkah-langkah:**
 1.  Pantau Tabel Screener di pojok kanan atas.
