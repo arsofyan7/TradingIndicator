@@ -15,6 +15,10 @@ Indikator *all-in-one* chart overlay untuk menangkap momen pembalikan arah (reve
 * **Smart RSI Filter:** Filter Entry berdasarkan momentum (Moderate/Sniper).
 * **Time-Locked:** Visual anti-geser/anti-lag.
 
+#### b. Update v1.3
+* Penambahan fitur **MTF Dashboard** (Pojok Kiri Bawah/Kanan Atas).
+* Penambahan menu **Posisi Matrix** di setting agar tidak menumpuk dengan indikator lain.
+
 ---
 
 ### 2. Combo: Trend & Volume Engine (TVE) - v1.0

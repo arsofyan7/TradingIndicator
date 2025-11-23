@@ -1,7 +1,7 @@
 // This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © SofyanGo
-//@version=5
-indicator("Custom Signal: Swing Reversal V1.2 (SMC)", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+// @version=5
+indicator("Custom Signal: Swing Reversal V1.3 (SMC + MTF)", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
 
 // ==========================================
 // 1. INPUT SETTING
@@ -18,10 +18,15 @@ rr_ratio   = input.float(2.0, "Risk:Reward Ratio (TP2)", step=0.1, group=grp_vis
 show_lines = input.bool(true, "Tampilkan Garis Level", group=grp_visual)
 lbl_size_input = input.string("Small", "Ukuran Label", options=["Tiny", "Small", "Normal", "Large"], group=grp_visual)
 
-// [FITUR BARU V1.2] SMC SETTING
 grp_smc    = "Smart Money Concepts (SMC)"
-show_ob    = input.bool(true, "Show Order Block (Box)", group=grp_smc, tooltip="Gambar kotak di candle Swing (Area Entry Institusi)")
-show_fvg   = input.bool(true, "Show FVG (Imbalance)", group=grp_smc, tooltip="Gambar area Fair Value Gap yang terbentuk")
+show_ob    = input.bool(true, "Show Order Block (Box)", group=grp_smc)
+show_fvg   = input.bool(true, "Show FVG (Imbalance)", group=grp_smc)
+
+// [FITUR MTF DASHBOARD]
+grp_mtf    = "MTF Trend Dashboard"
+show_mtf   = input.bool(true, "Show MTF Matrix", group=grp_mtf)
+// Fitur Baru: Dropdown Posisi Table
+mtf_pos_in = input.string("Top Right", "Posisi Matrix", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grp_mtf)
 
 size_mapping = switch lbl_size_input
     "Tiny"   => size.tiny
@@ -30,14 +35,25 @@ size_mapping = switch lbl_size_input
     "Large"  => size.large
     => size.small
 
-// ==========================================
-// 2. LOGIC & CALCULATION
-// ==========================================
+// Mapping Posisi Table
+table_pos = switch mtf_pos_in
+    "Top Right"    => position.top_right
+    "Top Left"     => position.top_left
+    "Bottom Right" => position.bottom_right
+    "Bottom Left"  => position.bottom_left
+    => position.top_right
 
-// A. RSI
+// ==========================================
+// 2. DATA REQUEST (GLOBAL SCOPE)
+// ==========================================
+[d_c, d_ema] = request.security(syminfo.tickerid, "D", [close, ta.ema(close, 200)], ignore_invalid_symbol=true)
+[w_c, w_ema] = request.security(syminfo.tickerid, "W", [close, ta.ema(close, 200)], ignore_invalid_symbol=true)
+
+// ==========================================
+// 3. CORE LOGIC
+// ==========================================
 rsi_val = ta.rsi(close, 14)
 
-// B. Swing Reversal
 hi_swing = ta.highest(high, sw_period)
 lo_swing = ta.lowest(low, sw_period)
 is_pivot_high = high[1] == ta.highest(high, sw_period)[1]
@@ -46,7 +62,6 @@ is_pivot_low  = low[1]  == ta.lowest(low, sw_period)[1]
 buy_signal_pa  = is_pivot_low and close > high[1]
 sell_signal_pa = is_pivot_high and close < low[1]
 
-// C. RSI Filter
 bool rsi_buy_pass  = true
 bool rsi_sell_pass = true
 
@@ -57,40 +72,25 @@ else if rsi_mode == "Sniper (<30 / >70)"
     rsi_buy_pass  := rsi_val < 30
     rsi_sell_pass := rsi_val > 70
 
-// D. Final Signal
 show_buy_dir  = (trade_dir == "Both" or trade_dir == "Buy Only")
 show_sell_dir = (trade_dir == "Both" or trade_dir == "Sell Only")
 
 final_buy  = buy_signal_pa and show_buy_dir and rsi_buy_pass
 final_sell = sell_signal_pa and show_sell_dir and rsi_sell_pass
 
-// Time Diff (Untuk visual anti-geser)
 time_diff = time - time[1] 
 t_duration = nz(time_diff) 
 line_end_time = time + (t_duration * 10)
 
 // ==========================================
-// 3. SMC LOGIC (FVG DETECTION)
+// 4. VISUALIZATION (SMC + SIGNALS)
 // ==========================================
-// Bullish FVG: Gap antara High candle ke-2 yang lalu dengan Low candle sekarang
-// Bearish FVG: Gap antara Low candle ke-2 yang lalu dengan High candle sekarang
-
 if show_fvg
-    // Bullish FVG
     if low > high[2] and close[1] > open[1]
-        // Gambar Box Transparan Kuning
         box.new(time[2], high[2], time + (t_duration * 5), low, xloc=xloc.bar_time, border_color=color.new(color.yellow, 80), bgcolor=color.new(color.yellow, 90))
-    
-    // Bearish FVG
     if high < low[2] and close[1] < open[1]
-        // Gambar Box Transparan Ungu
         box.new(time[2], low[2], time + (t_duration * 5), high, xloc=xloc.bar_time, border_color=color.new(color.purple, 80), bgcolor=color.new(color.purple, 90))
 
-// ==========================================
-// 4. VISUALIZATION (MAIN SIGNALS)
-// ==========================================
-
-// >>> EKSEKUSI SINYAL BUY
 if final_buy
     float entry = close
     float sl    = low[1] 
@@ -98,10 +98,8 @@ if final_buy
     float tp1   = entry + risk     
     float tp2   = entry + (risk * rr_ratio) 
 
-    // [SMC FEATURE] ORDER BLOCK BUY
-    // Kita gambar kotak di candle merah terakhir (candle swing low)
     if show_ob
-        box.new(time[1], high[1], time + (t_duration * 10), low[1], xloc=xloc.bar_time, border_color=color.green, bgcolor=color.new(color.green, 80), text="OB", text_color=color.green, text_size=size.tiny)
+        box.new(time[1], high[1], time + (t_duration * 10), low[1], xloc=xloc.bar_time, border_color=color.green, bgcolor=color.new(color.green, 85), text="OB", text_color=color.green, text_size=size.tiny)
 
     label_text = "BUY" + 
                  "\nEntry: " + str.tostring(entry, format.mintick) + 
@@ -121,7 +119,6 @@ if final_buy
         label.new(line_end_time, tp1, "TP1", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
         label.new(line_end_time, tp2, "TP2", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
 
-// >>> EKSEKUSI SINYAL SELL
 if final_sell
     float entry = close
     float sl    = high[1] 
@@ -129,10 +126,8 @@ if final_sell
     float tp1   = entry - risk
     float tp2   = entry - (risk * rr_ratio)
 
-    // [SMC FEATURE] ORDER BLOCK SELL
-    // Kita gambar kotak di candle hijau terakhir (candle swing high)
     if show_ob
-        box.new(time[1], high[1], time + (t_duration * 10), low[1], xloc=xloc.bar_time, border_color=color.red, bgcolor=color.new(color.red, 80), text="OB", text_color=color.red, text_size=size.tiny)
+        box.new(time[1], high[1], time + (t_duration * 10), low[1], xloc=xloc.bar_time, border_color=color.red, bgcolor=color.new(color.red, 85), text="OB", text_color=color.red, text_size=size.tiny)
 
     label_text = "SELL" + 
                  "\nEntry: " + str.tostring(entry, format.mintick) + 
@@ -151,3 +146,27 @@ if final_sell
         line.new(time, tp2, line_end_time, tp2, xloc=xloc.bar_time, color=color.blue, width=2)
         label.new(line_end_time, tp1, "TP1", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
         label.new(line_end_time, tp2, "TP2", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
+
+// ==========================================
+// 5. MTF DASHBOARD (POSISI DINAMIS)
+// ==========================================
+if show_mtf
+    d_trend_up = d_c > d_ema
+    w_trend_up = w_c > w_ema
+    
+    // Gunakan variabel table_pos dari input user
+    var tbl_mtf = table.new(table_pos, 2, 3, frame_color=color.gray, frame_width=1, border_width=1, border_color=color.gray, bgcolor=color.new(color.black, 80))
+    
+    if barstate.islast
+        table.cell(tbl_mtf, 0, 0, "MTF Trend", text_color=color.white, text_size=size.small)
+        table.cell(tbl_mtf, 1, 0, "(EMA 200)", text_color=color.gray, text_size=size.small)
+        
+        d_col = d_trend_up ? color.green : color.red
+        d_txt = d_trend_up ? "BULL" : "BEAR"
+        table.cell(tbl_mtf, 0, 1, "Daily", text_color=color.white, text_size=size.small, text_halign=text.align_left)
+        table.cell(tbl_mtf, 1, 1, d_txt, text_color=d_col, text_size=size.small, bgcolor=color.new(d_col, 90))
+        
+        w_col = w_trend_up ? color.green : color.red
+        w_txt = w_trend_up ? "BULL" : "BEAR"
+        table.cell(tbl_mtf, 0, 2, "Weekly", text_color=color.white, text_size=size.small, text_halign=text.align_left)
+        table.cell(tbl_mtf, 1, 2, w_txt, text_color=w_col, text_size=size.small, bgcolor=color.new(w_col, 90))
