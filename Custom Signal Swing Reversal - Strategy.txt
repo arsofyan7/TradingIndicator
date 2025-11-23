@@ -1,0 +1,96 @@
+//@version=5
+strategy("STRATEGY: Swing Reversal V1.2 (SMC)", overlay=true, initial_capital=10000000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, currency=currency.USD)
+
+// ==========================================
+// 1. INPUT SETTING
+// ==========================================
+grp_logic = "Logic Setting"
+sw_period  = input.int(3, "Swing Lookback Period", group=grp_logic) 
+trade_dir  = input.string("Both", "Tampilkan Sinyal", options=["Both", "Buy Only", "Sell Only"], group=grp_logic)
+
+grp_filter = "RSI Filter Setting"
+rsi_mode   = input.string("Moderate (<50 / >50)", "Mode Filter RSI", options=["Off", "Moderate (<50 / >50)", "Sniper (<30 / >70)"], group=grp_filter)
+
+grp_visual = "Visual Setting"
+rr_ratio   = input.float(2.0, "Risk:Reward Ratio (TP)", step=0.1, group=grp_visual)
+show_lines = input.bool(true, "Tampilkan Garis Level", group=grp_visual)
+
+// BACKTEST PERIOD
+grp_time = "Rentang Waktu Backtest"
+start_date = input.time(timestamp("01 Jan 2024 00:00 +0700"), "Mulai Tanggal", group=grp_time)
+end_date   = input.time(timestamp("31 Dec 2025 23:59 +0700"), "Sampai Tanggal", group=grp_time)
+
+// ==========================================
+// 2. LOGIC CALCULATION
+// ==========================================
+// RSI
+rsi_val = ta.rsi(close, 14)
+
+// Swing Logic
+hi_swing = ta.highest(high, sw_period)
+lo_swing = ta.lowest(low, sw_period)
+is_pivot_high = high[1] == ta.highest(high, sw_period)[1]
+is_pivot_low  = low[1]  == ta.lowest(low, sw_period)[1]
+
+// Base Trigger
+buy_signal_pa  = is_pivot_low and close > high[1]
+sell_signal_pa = is_pivot_high and close < low[1]
+
+// RSI Filter
+bool rsi_buy_pass  = true
+bool rsi_sell_pass = true
+if rsi_mode == "Moderate (<50 / >50)"
+    rsi_buy_pass  := rsi_val < 50
+    rsi_sell_pass := rsi_val > 50
+else if rsi_mode == "Sniper (<30 / >70)"
+    rsi_buy_pass  := rsi_val < 30
+    rsi_sell_pass := rsi_val > 70
+
+// Final Signal
+show_buy_dir  = (trade_dir == "Both" or trade_dir == "Buy Only")
+show_sell_dir = (trade_dir == "Both" or trade_dir == "Sell Only")
+final_buy  = buy_signal_pa and show_buy_dir and rsi_buy_pass
+final_sell = sell_signal_pa and show_sell_dir and rsi_sell_pass
+
+// Time Filter (Untuk Backtest)
+in_date_range = time >= start_date and time <= end_date
+
+// ==========================================
+// 3. STRATEGY EXECUTION (AUTO ENTRY/EXIT)
+// ==========================================
+
+// >> EXECUTE BUY
+if final_buy and in_date_range and strategy.position_size == 0
+    float entry = close
+    float sl    = low[1]
+    float risk  = entry - sl
+    float tp    = entry + (risk * rr_ratio) // TP sesuai RR Ratio
+    
+    // Entry Market Order
+    strategy.entry("Long", strategy.long, comment="Entry Buy")
+    
+    // Pasang Bracket Order (TP & SL otomatis)
+    strategy.exit("Exit Long", "Long", stop=sl, limit=tp, comment_loss="SL Hit", comment_profit="TP Hit")
+    
+    // Visual Helper (Sama kayak Indikator)
+    if show_lines
+        line.new(bar_index, entry, bar_index+5, entry, color=color.gray)
+        line.new(bar_index, sl, bar_index+5, sl, color=color.red)
+        line.new(bar_index, tp, bar_index+5, tp, color=color.blue)
+        box.new(bar_index[1], high[1], bar_index+5, low[1], border_color=color.green, bgcolor=color.new(color.green, 90)) // OB Box
+
+// >> EXECUTE SELL
+if final_sell and in_date_range and strategy.position_size == 0
+    float entry = close
+    float sl    = high[1]
+    float risk  = sl - entry
+    float tp    = entry - (risk * rr_ratio)
+    
+    strategy.entry("Short", strategy.short, comment="Entry Sell")
+    strategy.exit("Exit Short", "Short", stop=sl, limit=tp, comment_loss="SL Hit", comment_profit="TP Hit")
+
+    if show_lines
+        line.new(bar_index, entry, bar_index+5, entry, color=color.gray)
+        line.new(bar_index, sl, bar_index+5, sl, color=color.red)
+        line.new(bar_index, tp, bar_index+5, tp, color=color.blue)
+        box.new(bar_index[1], high[1], bar_index+5, low[1], border_color=color.red, bgcolor=color.new(color.red, 90)) // OB Box
