@@ -12,7 +12,7 @@ Dokumen ini berisi Standard Operating Procedure (SOP) untuk menjalankan rutinita
 
 Sistem ini bergantung pada 4 komponen utama yang harus terpasang di Chart TradingView:
 
-1.  **Filter Hulu:** TradingView Built-in Screener (Preset: *"Saringan Mas Cyber"*).
+1.  **Filter Hulu:** TradingView Built-in Screener (Preset: *"Lihat file Screenshot"*).
 2.  **Radar:** Custom Indicator `The Hunter Screener v1.2` (Overlay).
 3.  **Scope/Trigger:** Custom Indicator `Swing Reversal Pro v1.2 (SMC)` (Main Chart).
 4.  **Validasi:** Custom Indicator `Combo TVE v1.0` (Bottom Panel).
