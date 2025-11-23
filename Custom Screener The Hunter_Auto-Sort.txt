@@ -1,0 +1,296 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © SofyanGo
+
+//@version=5
+indicator("Custom Screener: The Hunter v1.2 (Auto-Sort)", overlay=true)
+
+// ==========================================
+// 1. INPUT WATCHLIST (40 SLOT - LQ45 MIX)
+// ==========================================
+g_bank = "Banking & Finance"
+s01 = input.symbol("IDX:BBCA", "1. BBCA", group=g_bank)
+s02 = input.symbol("IDX:BBRI", "2. BBRI", group=g_bank)
+s03 = input.symbol("IDX:BMRI", "3. BMRI", group=g_bank)
+s04 = input.symbol("IDX:BBNI", "4. BBNI", group=g_bank)
+s05 = input.symbol("IDX:BRIS", "5. BRIS", group=g_bank)
+s06 = input.symbol("IDX:ARTO", "6. ARTO", group=g_bank)
+s07 = input.symbol("IDX:BBTN", "7. BBTN", group=g_bank)
+s08 = input.symbol("IDX:BFIN", "8. BFIN", group=g_bank)
+
+g_energy = "Energy & Mining"
+s09 = input.symbol("IDX:ADRO", "9. ADRO", group=g_energy)
+s10 = input.symbol("IDX:PTBA", "10. PTBA", group=g_energy)
+s11 = input.symbol("IDX:PGAS", "11. PGAS", group=g_energy)
+s12 = input.symbol("IDX:ANTM", "12. ANTM", group=g_energy)
+s13 = input.symbol("IDX:INCO", "13. INCO", group=g_energy)
+s14 = input.symbol("IDX:MDKA", "14. MDKA", group=g_energy)
+s15 = input.symbol("IDX:MEDC", "15. MEDC", group=g_energy)
+s16 = input.symbol("IDX:AKRA", "16. AKRA", group=g_energy)
+s17 = input.symbol("IDX:ITMG", "17. ITMG", group=g_energy)
+s18 = input.symbol("IDX:HRUM", "18. HRUM", group=g_energy)
+
+g_cons = "Consumer & Retail"
+s19 = input.symbol("IDX:ICBP", "19. ICBP", group=g_cons)
+s20 = input.symbol("IDX:INDF", "20. INDF", group=g_cons)
+s21 = input.symbol("IDX:UNVR", "21. UNVR", group=g_cons)
+s22 = input.symbol("IDX:AMRT", "22. AMRT", group=g_cons)
+s23 = input.symbol("IDX:KLBF", "23. KLBF", group=g_cons)
+s24 = input.symbol("IDX:SIDO", "24. SIDO", group=g_cons)
+s25 = input.symbol("IDX:ACES", "25. ACES", group=g_cons)
+s26 = input.symbol("IDX:CPIN", "26. CPIN", group=g_cons)
+
+g_tech = "Tech & Telco"
+s27 = input.symbol("IDX:TLKM", "27. TLKM", group=g_tech)
+s28 = input.symbol("IDX:ISAT", "28. ISAT", group=g_tech)
+s29 = input.symbol("IDX:EXCL", "29. EXCL", group=g_tech)
+s30 = input.symbol("IDX:GOTO", "30. GOTO", group=g_tech)
+s31 = input.symbol("IDX:EMTK", "31. EMTK", group=g_tech)
+s32 = input.symbol("IDX:BUKA", "32. BUKA", group=g_tech)
+s33 = input.symbol("IDX:SCMA", "33. SCMA", group=g_tech)
+
+g_others = "Infra & Others"
+s34 = input.symbol("IDX:ASII", "34. ASII", group=g_others)
+s35 = input.symbol("IDX:UNTR", "35. UNTR", group=g_others)
+s36 = input.symbol("IDX:SMGR", "36. SMGR", group=g_others)
+s37 = input.symbol("IDX:INKP", "37. INKP", group=g_others)
+s38 = input.symbol("IDX:TKIM", "38. TKIM", group=g_others)
+s39 = input.symbol("IDX:TOWR", "39. TOWR", group=g_others)
+s40 = input.symbol("IDX:JSMR", "40. JSMR", group=g_others)
+
+// ==========================================
+// 2. CORE LOGIC FUNCTION
+// ==========================================
+f_engine() =>
+    // A. RSI
+    rsi = ta.rsi(close, 14)
+    
+    // B. Swing Reversal 
+    is_reversal = (close > open and low < low[1] and close > close[1]) or (close > high[1])
+    
+    // C. Combo TVE
+    [macdLine, sigLine, hist] = ta.macd(close, 12, 26, 9)
+    vol_avg = ta.sma(volume, 20)
+    is_high_vol = volume > vol_avg
+    
+    // D. Status Check
+    bool signal_buy = is_reversal and rsi < 50
+    bool trend_up   = macdLine > sigLine
+    
+    // Logic Scoring (Untuk Sorting)
+    // 3 = BUY (Strong)
+    // 2 = WEAK (Buy but Low Vol)
+    // 1 = HOLD
+    // 0 = WAIT
+    int score = 0
+    string o_txt = "WAIT"
+    color  o_col = color.gray
+    
+    if trend_up
+        score := 1
+        o_txt := "HOLD"
+        o_col := color.blue
+        
+    if signal_buy
+        if is_high_vol
+            score := 3
+            o_txt := "BUY"
+            o_col := color.green
+        else
+            score := 2
+            o_txt := "WEAK"
+            o_col := color.olive
+        
+    [o_txt, o_col, rsi, close, is_high_vol, score]
+
+// ==========================================
+// 3. FETCH & PUSH DATA
+// ==========================================
+a_sym   = array.new_string(0)
+a_txt   = array.new_string(0)
+a_col   = array.new_color(0)
+a_rsi   = array.new_float(0)
+a_price = array.new_float(0)
+a_vol   = array.new_bool(0)
+a_score = array.new_int(0) // Array Score Baru
+
+f_push(_s, _t, _c, _r, _p, _v, _sc) =>
+    if str.length(_s) > 0
+        array.push(a_sym, _s)
+        array.push(a_txt, _t)
+        array.push(a_col, _c)
+        array.push(a_rsi, _r)
+        array.push(a_price, _p)
+        array.push(a_vol, _v)
+        array.push(a_score, _sc)
+
+// --- BLOCK PEMANGGILAN 40 SAHAM ---
+[t01, c01, r01, p01, v01, sc01] = request.security(s01, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s01, t01, c01, r01, p01, v01, sc01)
+[t02, c02, r02, p02, v02, sc02] = request.security(s02, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s02, t02, c02, r02, p02, v02, sc02)
+[t03, c03, r03, p03, v03, sc03] = request.security(s03, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s03, t03, c03, r03, p03, v03, sc03)
+[t04, c04, r04, p04, v04, sc04] = request.security(s04, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s04, t04, c04, r04, p04, v04, sc04)
+[t05, c05, r05, p05, v05, sc05] = request.security(s05, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s05, t05, c05, r05, p05, v05, sc05)
+[t06, c06, r06, p06, v06, sc06] = request.security(s06, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s06, t06, c06, r06, p06, v06, sc06)
+[t07, c07, r07, p07, v07, sc07] = request.security(s07, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s07, t07, c07, r07, p07, v07, sc07)
+[t08, c08, r08, p08, v08, sc08] = request.security(s08, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s08, t08, c08, r08, p08, v08, sc08)
+
+[t09, c09, r09, p09, v09, sc09] = request.security(s09, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s09, t09, c09, r09, p09, v09, sc09)
+[t10, c10, r10, p10, v10, sc10] = request.security(s10, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s10, t10, c10, r10, p10, v10, sc10)
+[t11, c11, r11, p11, v11, sc11] = request.security(s11, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s11, t11, c11, r11, p11, v11, sc11)
+[t12, c12, r12, p12, v12, sc12] = request.security(s12, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s12, t12, c12, r12, p12, v12, sc12)
+[t13, c13, r13, p13, v13, sc13] = request.security(s13, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s13, t13, c13, r13, p13, v13, sc13)
+[t14, c14, r14, p14, v14, sc14] = request.security(s14, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s14, t14, c14, r14, p14, v14, sc14)
+[t15, c15, r15, p15, v15, sc15] = request.security(s15, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s15, t15, c15, r15, p15, v15, sc15)
+[t16, c16, r16, p16, v16, sc16] = request.security(s16, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s16, t16, c16, r16, p16, v16, sc16)
+[t17, c17, r17, p17, v17, sc17] = request.security(s17, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s17, t17, c17, r17, p17, v17, sc17)
+[t18, c18, r18, p18, v18, sc18] = request.security(s18, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s18, t18, c18, r18, p18, v18, sc18)
+
+[t19, c19, r19, p19, v19, sc19] = request.security(s19, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s19, t19, c19, r19, p19, v19, sc19)
+[t20, c20, r20, p20, v20, sc20] = request.security(s20, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s20, t20, c20, r20, p20, v20, sc20)
+[t21, c21, r21, p21, v21, sc21] = request.security(s21, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s21, t21, c21, r21, p21, v21, sc21)
+[t22, c22, r22, p22, v22, sc22] = request.security(s22, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s22, t22, c22, r22, p22, v22, sc22)
+[t23, c23, r23, p23, v23, sc23] = request.security(s23, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s23, t23, c23, r23, p23, v23, sc23)
+[t24, c24, r24, p24, v24, sc24] = request.security(s24, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s24, t24, c24, r24, p24, v24, sc24)
+[t25, c25, r25, p25, v25, sc25] = request.security(s25, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s25, t25, c25, r25, p25, v25, sc25)
+[t26, c26, r26, p26, v26, sc26] = request.security(s26, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s26, t26, c26, r26, p26, v26, sc26)
+
+[t27, c27, r27, p27, v27, sc27] = request.security(s27, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s27, t27, c27, r27, p27, v27, sc27)
+[t28, c28, r28, p28, v28, sc28] = request.security(s28, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s28, t28, c28, r28, p28, v28, sc28)
+[t29, c29, r29, p29, v29, sc29] = request.security(s29, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s29, t29, c29, r29, p29, v29, sc29)
+[t30, c30, r30, p30, v30, sc30] = request.security(s30, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s30, t30, c30, r30, p30, v30, sc30)
+[t31, c31, r31, p31, v31, sc31] = request.security(s31, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s31, t31, c31, r31, p31, v31, sc31)
+[t32, c32, r32, p32, v32, sc32] = request.security(s32, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s32, t32, c32, r32, p32, v32, sc32)
+[t33, c33, r33, p33, v33, sc33] = request.security(s33, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s33, t33, c33, r33, p33, v33, sc33)
+
+[t34, c34, r34, p34, v34, sc34] = request.security(s34, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s34, t34, c34, r34, p34, v34, sc34)
+[t35, c35, r35, p35, v35, sc35] = request.security(s35, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s35, t35, c35, r35, p35, v35, sc35)
+[t36, c36, r36, p36, v36, sc36] = request.security(s36, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s36, t36, c36, r36, p36, v36, sc36)
+[t37, c37, r37, p37, v37, sc37] = request.security(s37, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s37, t37, c37, r37, p37, v37, sc37)
+[t38, c38, r38, p38, v38, sc38] = request.security(s38, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s38, t38, c38, r38, p38, v38, sc38)
+[t39, c39, r39, p39, v39, sc39] = request.security(s39, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s39, t39, c39, r39, p39, v39, sc39)
+[t40, c40, r40, p40, v40, sc40] = request.security(s40, timeframe.period, f_engine(), ignore_invalid_symbol=true)
+f_push(s40, t40, c40, r40, p40, v40, sc40)
+
+// ==========================================
+// 4. SORTING LOGIC (BUBBLE SORT DESCENDING)
+// ==========================================
+// Kita urutkan berdasarkan Skor: BUY(3) > WEAK(2) > HOLD(1) > WAIT(0)
+
+len = array.size(a_score)
+if len > 1
+    for i = 0 to len - 2
+        for j = 0 to len - 2 - i
+            // Cek jika Score item sekarang lebih KECIL dari item berikutnya
+            if array.get(a_score, j) < array.get(a_score, j + 1)
+                // SWAP SEMUA ARRAY BERSAMAAN
+                
+                // 1. Score
+                t_sc = array.get(a_score, j)
+                array.set(a_score, j, array.get(a_score, j+1))
+                array.set(a_score, j+1, t_sc)
+                
+                // 2. Symbol
+                t_sym = array.get(a_sym, j)
+                array.set(a_sym, j, array.get(a_sym, j+1))
+                array.set(a_sym, j+1, t_sym)
+                
+                // 3. Text Signal
+                t_txt = array.get(a_txt, j)
+                array.set(a_txt, j, array.get(a_txt, j+1))
+                array.set(a_txt, j+1, t_txt)
+                
+                // 4. Color
+                t_col = array.get(a_col, j)
+                array.set(a_col, j, array.get(a_col, j+1))
+                array.set(a_col, j+1, t_col)
+                
+                // 5. RSI
+                t_rsi = array.get(a_rsi, j)
+                array.set(a_rsi, j, array.get(a_rsi, j+1))
+                array.set(a_rsi, j+1, t_rsi)
+                
+                // 6. Price
+                t_prc = array.get(a_price, j)
+                array.set(a_price, j, array.get(a_price, j+1))
+                array.set(a_price, j+1, t_prc)
+                
+                // 7. Vol
+                t_vol = array.get(a_vol, j)
+                array.set(a_vol, j, array.get(a_vol, j+1))
+                array.set(a_vol, j+1, t_vol)
+
+// ==========================================
+// 5. DRAW TABLE (SUDAH TERURUT)
+// ==========================================
+var tbl = table.new(position.top_right, 6, 42, frame_color=color.gray, frame_width=1, border_width=1, border_color=color.gray)
+
+if barstate.islast
+    // Header
+    table.cell(tbl, 0, 0, "Ticker", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
+    table.cell(tbl, 1, 0, "Price", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
+    table.cell(tbl, 2, 0, "Signal", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
+    table.cell(tbl, 3, 0, "RSI", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
+    table.cell(tbl, 4, 0, "Vol", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
+    
+    // Loop Data (Sekarang Array sudah terurut dari Skor tertinggi)
+    if array.size(a_sym) > 0
+        for i = 0 to array.size(a_sym) - 1
+            sym = array.get(a_sym, i)
+            sig = array.get(a_txt, i)
+            col = array.get(a_col, i)
+            rsi = array.get(a_rsi, i)
+            prc = array.get(a_price, i)
+            vol = array.get(a_vol, i)
+            
+            sym_clean = str.replace(sym, "IDX:", "")
+            bg_col = i % 2 == 0 ? color.new(color.black, 90) : color.new(color.black, 80)
+            txt_s = size.tiny
+            
+            table.cell(tbl, 0, i+1, sym_clean, bgcolor=bg_col, text_color=color.white, text_size=txt_s, text_halign=text.align_left)
+            table.cell(tbl, 1, i+1, str.tostring(prc), bgcolor=bg_col, text_color=color.white, text_size=txt_s)
+            table.cell(tbl, 2, i+1, sig, bgcolor=col, text_color=color.white, text_size=txt_s)
+            
+            col_rsi = rsi < 50 ? color.green : (rsi > 70 ? color.red : color.white)
+            table.cell(tbl, 3, i+1, str.tostring(rsi, "#"), bgcolor=bg_col, text_color=col_rsi, text_size=txt_s)
+            
+            txt_vol = vol ? "H" : "L"
+            col_vol = vol ? color.green : color.gray
+            table.cell(tbl, 4, i+1, txt_vol, bgcolor=bg_col, text_color=col_vol, text_size=txt_s)
