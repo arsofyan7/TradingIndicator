@@ -1,7 +1,7 @@
 // This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © SofyanGo
-// @version=5
-indicator("Custom Signal: Swing Reversal V1.3 (SMC + MTF)", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+//@version=5
+indicator("Custom Signal: Swing Reversal V1.4 (SMC + MTF + Trailing)", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
 
 // ==========================================
 // 1. INPUT SETTING
@@ -22,11 +22,15 @@ grp_smc    = "Smart Money Concepts (SMC)"
 show_ob    = input.bool(true, "Show Order Block (Box)", group=grp_smc)
 show_fvg   = input.bool(true, "Show FVG (Imbalance)", group=grp_smc)
 
-// [FITUR MTF DASHBOARD]
+// [FITUR MTF]
 grp_mtf    = "MTF Trend Dashboard"
 show_mtf   = input.bool(true, "Show MTF Matrix", group=grp_mtf)
-// Fitur Baru: Dropdown Posisi Table
 mtf_pos_in = input.string("Top Right", "Posisi Matrix", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grp_mtf)
+
+// [FITUR BARU V1.4] TRAILING STOP
+grp_trail  = "Trailing Stop (Runner)"
+show_trail = input.bool(true, "Show Trailing Line", group=grp_trail, tooltip="Garis pengaman profit. Exit jika Close di bawah garis ini.")
+atr_mult   = input.float(2.0, "Trailing Sensitivity", step=0.5, group=grp_trail, tooltip="Makin kecil makin ketat (mudah kena hit). Makin besar makin longgar (bisa nangkep trend panjang).")
 
 size_mapping = switch lbl_size_input
     "Tiny"   => size.tiny
@@ -35,7 +39,6 @@ size_mapping = switch lbl_size_input
     "Large"  => size.large
     => size.small
 
-// Mapping Posisi Table
 table_pos = switch mtf_pos_in
     "Top Right"    => position.top_right
     "Top Left"     => position.top_left
@@ -44,7 +47,7 @@ table_pos = switch mtf_pos_in
     => position.top_right
 
 // ==========================================
-// 2. DATA REQUEST (GLOBAL SCOPE)
+// 2. DATA REQUEST
 // ==========================================
 [d_c, d_ema] = request.security(syminfo.tickerid, "D", [close, ta.ema(close, 200)], ignore_invalid_symbol=true)
 [w_c, w_ema] = request.security(syminfo.tickerid, "W", [close, ta.ema(close, 200)], ignore_invalid_symbol=true)
@@ -83,7 +86,46 @@ t_duration = nz(time_diff)
 line_end_time = time + (t_duration * 10)
 
 // ==========================================
-// 4. VISUALIZATION (SMC + SIGNALS)
+// 4. TRAILING STOP LOGIC (ATR BASED)
+// ==========================================
+atr_val = ta.atr(14)
+// Logic: Trailing Stop Buy ada di bawah harga (Low - ATR*Mult)
+ts_buy_raw = low - (atr_val * atr_mult)
+// Logic: Trailing Stop Sell ada di atas harga (High + ATR*Mult)
+ts_sell_raw = high + (atr_val * atr_mult)
+
+// Ratchet Mechanism (Biar garisnya gak turun pas Buy, gak naik pas Sell)
+var float ts_buy = na
+var float ts_sell = na
+
+// Reset Trailing saat sinyal baru muncul
+if final_buy
+    ts_buy := ts_buy_raw
+if final_sell
+    ts_sell := ts_sell_raw
+
+// Update Trailing (Hanya naik untuk Buy)
+if not final_buy and not na(ts_buy)
+    // Kalau harga close masih diatas TS, update TS (pilih yang lebih tinggi)
+    if close > ts_buy
+        ts_buy := math.max(ts_buy, ts_buy_raw)
+    else
+        // Kalau close di bawah TS, reset (Exit Signal)
+        ts_buy := na
+
+// Update Trailing (Hanya turun untuk Sell)
+if not final_sell and not na(ts_sell)
+    if close < ts_sell
+        ts_sell := math.min(ts_sell, ts_sell_raw)
+    else
+        ts_sell := na
+
+// Plotting Trailing Line
+plot(show_trail ? ts_buy : na, "Trailing Buy", color=color.purple, style=plot.style_linebr, linewidth=2)
+plot(show_trail ? ts_sell : na, "Trailing Sell", color=color.purple, style=plot.style_linebr, linewidth=2)
+
+// ==========================================
+// 5. VISUALIZATION
 // ==========================================
 if show_fvg
     if low > high[2] and close[1] > open[1]
@@ -148,13 +190,12 @@ if final_sell
         label.new(line_end_time, tp2, "TP2", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
 
 // ==========================================
-// 5. MTF DASHBOARD (POSISI DINAMIS)
+// 6. MTF DASHBOARD
 // ==========================================
 if show_mtf
     d_trend_up = d_c > d_ema
     w_trend_up = w_c > w_ema
     
-    // Gunakan variabel table_pos dari input user
     var tbl_mtf = table.new(table_pos, 2, 3, frame_color=color.gray, frame_width=1, border_width=1, border_color=color.gray, bgcolor=color.new(color.black, 80))
     
     if barstate.islast

@@ -15,9 +15,15 @@ Indikator *all-in-one* chart overlay untuk menangkap momen pembalikan arah (reve
 * **Smart RSI Filter:** Filter Entry berdasarkan momentum (Moderate/Sniper).
 * **Time-Locked:** Visual anti-geser/anti-lag.
 
-#### b. Update v1.3
+#### b. Cara Penggunaan (MTF)
 * Penambahan fitur **MTF Dashboard** (Pojok Kiri Bawah/Kanan Atas).
 * Penambahan menu **Posisi Matrix** di setting agar tidak menumpuk dengan indikator lain.
+
+#### b. Cara Penggunaan (Trailing Stop)
+1.  Saat sinyal BUY muncul, **Garis Ungu** akan muncul di bawah harga.
+2.  Jika harga sudah menembus TP2, jangan buru-buru jual semua.
+3.  Tahan posisi (*Hold*) selama harga masih berada di atas Garis Ungu.
+4.  Lakukan **Take Profit Final** saat ada candle yang tutup (*Close*) di bawah Garis Ungu.
 
 ---
 

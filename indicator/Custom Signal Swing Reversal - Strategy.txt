@@ -1,5 +1,7 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © SofyanGo
 //@version=5
-strategy("STRATEGY: Swing Reversal V1.2 (SMC)", overlay=true, initial_capital=10000000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, currency=currency.USD)
+indicator("Custom Signal: Swing Reversal V1.4 (SMC + MTF + Trailing)", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
 
 // ==========================================
 // 1. INPUT SETTING
@@ -12,33 +14,60 @@ grp_filter = "RSI Filter Setting"
 rsi_mode   = input.string("Moderate (<50 / >50)", "Mode Filter RSI", options=["Off", "Moderate (<50 / >50)", "Sniper (<30 / >70)"], group=grp_filter)
 
 grp_visual = "Visual Setting"
-rr_ratio   = input.float(2.0, "Risk:Reward Ratio (TP)", step=0.1, group=grp_visual)
+rr_ratio   = input.float(2.0, "Risk:Reward Ratio (TP2)", step=0.1, group=grp_visual)
 show_lines = input.bool(true, "Tampilkan Garis Level", group=grp_visual)
+lbl_size_input = input.string("Small", "Ukuran Label", options=["Tiny", "Small", "Normal", "Large"], group=grp_visual)
 
-// BACKTEST PERIOD
-grp_time = "Rentang Waktu Backtest"
-start_date = input.time(timestamp("01 Jan 2024 00:00 +0700"), "Mulai Tanggal", group=grp_time)
-end_date   = input.time(timestamp("31 Dec 2025 23:59 +0700"), "Sampai Tanggal", group=grp_time)
+grp_smc    = "Smart Money Concepts (SMC)"
+show_ob    = input.bool(true, "Show Order Block (Box)", group=grp_smc)
+show_fvg   = input.bool(true, "Show FVG (Imbalance)", group=grp_smc)
+
+// [FITUR MTF]
+grp_mtf    = "MTF Trend Dashboard"
+show_mtf   = input.bool(true, "Show MTF Matrix", group=grp_mtf)
+mtf_pos_in = input.string("Top Right", "Posisi Matrix", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grp_mtf)
+
+// [FITUR BARU V1.4] TRAILING STOP
+grp_trail  = "Trailing Stop (Runner)"
+show_trail = input.bool(true, "Show Trailing Line", group=grp_trail, tooltip="Garis pengaman profit. Exit jika Close di bawah garis ini.")
+atr_mult   = input.float(2.0, "Trailing Sensitivity", step=0.5, group=grp_trail, tooltip="Makin kecil makin ketat (mudah kena hit). Makin besar makin longgar (bisa nangkep trend panjang).")
+
+size_mapping = switch lbl_size_input
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+
+table_pos = switch mtf_pos_in
+    "Top Right"    => position.top_right
+    "Top Left"     => position.top_left
+    "Bottom Right" => position.bottom_right
+    "Bottom Left"  => position.bottom_left
+    => position.top_right
 
 // ==========================================
-// 2. LOGIC CALCULATION
+// 2. DATA REQUEST
 // ==========================================
-// RSI
+[d_c, d_ema] = request.security(syminfo.tickerid, "D", [close, ta.ema(close, 200)], ignore_invalid_symbol=true)
+[w_c, w_ema] = request.security(syminfo.tickerid, "W", [close, ta.ema(close, 200)], ignore_invalid_symbol=true)
+
+// ==========================================
+// 3. CORE LOGIC
+// ==========================================
 rsi_val = ta.rsi(close, 14)
 
-// Swing Logic
 hi_swing = ta.highest(high, sw_period)
 lo_swing = ta.lowest(low, sw_period)
 is_pivot_high = high[1] == ta.highest(high, sw_period)[1]
 is_pivot_low  = low[1]  == ta.lowest(low, sw_period)[1]
 
-// Base Trigger
 buy_signal_pa  = is_pivot_low and close > high[1]
 sell_signal_pa = is_pivot_high and close < low[1]
 
-// RSI Filter
 bool rsi_buy_pass  = true
 bool rsi_sell_pass = true
+
 if rsi_mode == "Moderate (<50 / >50)"
     rsi_buy_pass  := rsi_val < 50
     rsi_sell_pass := rsi_val > 50
@@ -46,51 +75,139 @@ else if rsi_mode == "Sniper (<30 / >70)"
     rsi_buy_pass  := rsi_val < 30
     rsi_sell_pass := rsi_val > 70
 
-// Final Signal
 show_buy_dir  = (trade_dir == "Both" or trade_dir == "Buy Only")
 show_sell_dir = (trade_dir == "Both" or trade_dir == "Sell Only")
+
 final_buy  = buy_signal_pa and show_buy_dir and rsi_buy_pass
 final_sell = sell_signal_pa and show_sell_dir and rsi_sell_pass
 
-// Time Filter (Untuk Backtest)
-in_date_range = time >= start_date and time <= end_date
+time_diff = time - time[1] 
+t_duration = nz(time_diff) 
+line_end_time = time + (t_duration * 10)
 
 // ==========================================
-// 3. STRATEGY EXECUTION (AUTO ENTRY/EXIT)
+// 4. TRAILING STOP LOGIC (ATR BASED)
 // ==========================================
+atr_val = ta.atr(14)
+// Logic: Trailing Stop Buy ada di bawah harga (Low - ATR*Mult)
+ts_buy_raw = low - (atr_val * atr_mult)
+// Logic: Trailing Stop Sell ada di atas harga (High + ATR*Mult)
+ts_sell_raw = high + (atr_val * atr_mult)
 
-// >> EXECUTE BUY
-if final_buy and in_date_range and strategy.position_size == 0
+// Ratchet Mechanism (Biar garisnya gak turun pas Buy, gak naik pas Sell)
+var float ts_buy = na
+var float ts_sell = na
+
+// Reset Trailing saat sinyal baru muncul
+if final_buy
+    ts_buy := ts_buy_raw
+if final_sell
+    ts_sell := ts_sell_raw
+
+// Update Trailing (Hanya naik untuk Buy)
+if not final_buy and not na(ts_buy)
+    // Kalau harga close masih diatas TS, update TS (pilih yang lebih tinggi)
+    if close > ts_buy
+        ts_buy := math.max(ts_buy, ts_buy_raw)
+    else
+        // Kalau close di bawah TS, reset (Exit Signal)
+        ts_buy := na
+
+// Update Trailing (Hanya turun untuk Sell)
+if not final_sell and not na(ts_sell)
+    if close < ts_sell
+        ts_sell := math.min(ts_sell, ts_sell_raw)
+    else
+        ts_sell := na
+
+// Plotting Trailing Line
+plot(show_trail ? ts_buy : na, "Trailing Buy", color=color.purple, style=plot.style_linebr, linewidth=2)
+plot(show_trail ? ts_sell : na, "Trailing Sell", color=color.purple, style=plot.style_linebr, linewidth=2)
+
+// ==========================================
+// 5. VISUALIZATION
+// ==========================================
+if show_fvg
+    if low > high[2] and close[1] > open[1]
+        box.new(time[2], high[2], time + (t_duration * 5), low, xloc=xloc.bar_time, border_color=color.new(color.yellow, 80), bgcolor=color.new(color.yellow, 90))
+    if high < low[2] and close[1] < open[1]
+        box.new(time[2], low[2], time + (t_duration * 5), high, xloc=xloc.bar_time, border_color=color.new(color.purple, 80), bgcolor=color.new(color.purple, 90))
+
+if final_buy
     float entry = close
-    float sl    = low[1]
+    float sl    = low[1] 
     float risk  = entry - sl
-    float tp    = entry + (risk * rr_ratio) // TP sesuai RR Ratio
-    
-    // Entry Market Order
-    strategy.entry("Long", strategy.long, comment="Entry Buy")
-    
-    // Pasang Bracket Order (TP & SL otomatis)
-    strategy.exit("Exit Long", "Long", stop=sl, limit=tp, comment_loss="SL Hit", comment_profit="TP Hit")
-    
-    // Visual Helper (Sama kayak Indikator)
-    if show_lines
-        line.new(bar_index, entry, bar_index+5, entry, color=color.gray)
-        line.new(bar_index, sl, bar_index+5, sl, color=color.red)
-        line.new(bar_index, tp, bar_index+5, tp, color=color.blue)
-        box.new(bar_index[1], high[1], bar_index+5, low[1], border_color=color.green, bgcolor=color.new(color.green, 90)) // OB Box
+    float tp1   = entry + risk     
+    float tp2   = entry + (risk * rr_ratio) 
 
-// >> EXECUTE SELL
-if final_sell and in_date_range and strategy.position_size == 0
+    if show_ob
+        box.new(time[1], high[1], time + (t_duration * 10), low[1], xloc=xloc.bar_time, border_color=color.green, bgcolor=color.new(color.green, 85), text="OB", text_color=color.green, text_size=size.tiny)
+
+    label_text = "BUY" + 
+                 "\nEntry: " + str.tostring(entry, format.mintick) + 
+                 "\nTP1: " + str.tostring(tp1, format.mintick) + 
+                 "\nTP2: " + str.tostring(tp2, format.mintick) + 
+                 "\nSL: " + str.tostring(sl, format.mintick) +
+                 "\n(RSI: " + str.tostring(rsi_val, "#.##") + ")"
+    
+    label.new(time, na, text=label_text, xloc=xloc.bar_time, yloc=yloc.belowbar, color=color.green, textcolor=color.white, style=label.style_label_up, size=size_mapping)
+    label.new(time, entry, xloc=xloc.bar_time, color=color.yellow, style=label.style_circle, size=size.tiny)
+
+    if show_lines
+        line.new(time, entry, line_end_time, entry, xloc=xloc.bar_time, color=color.gray, style=line.style_dotted) 
+        line.new(time, sl, line_end_time, sl, xloc=xloc.bar_time, color=color.red, width=2) 
+        line.new(time, tp1, line_end_time, tp1, xloc=xloc.bar_time, color=color.blue, width=2) 
+        line.new(time, tp2, line_end_time, tp2, xloc=xloc.bar_time, color=color.blue, width=2)
+        label.new(line_end_time, tp1, "TP1", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
+        label.new(line_end_time, tp2, "TP2", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
+
+if final_sell
     float entry = close
-    float sl    = high[1]
+    float sl    = high[1] 
     float risk  = sl - entry
-    float tp    = entry - (risk * rr_ratio)
-    
-    strategy.entry("Short", strategy.short, comment="Entry Sell")
-    strategy.exit("Exit Short", "Short", stop=sl, limit=tp, comment_loss="SL Hit", comment_profit="TP Hit")
+    float tp1   = entry - risk
+    float tp2   = entry - (risk * rr_ratio)
+
+    if show_ob
+        box.new(time[1], high[1], time + (t_duration * 10), low[1], xloc=xloc.bar_time, border_color=color.red, bgcolor=color.new(color.red, 85), text="OB", text_color=color.red, text_size=size.tiny)
+
+    label_text = "SELL" + 
+                 "\nEntry: " + str.tostring(entry, format.mintick) + 
+                 "\nTP1: " + str.tostring(tp1, format.mintick) + 
+                 "\nTP2: " + str.tostring(tp2, format.mintick) + 
+                 "\nSL: " + str.tostring(sl, format.mintick) +
+                 "\n(RSI: " + str.tostring(rsi_val, "#.##") + ")"
+
+    label.new(time, na, text=label_text, xloc=xloc.bar_time, yloc=yloc.abovebar, color=color.red, textcolor=color.white, style=label.style_label_down, size=size_mapping)
+    label.new(time, entry, xloc=xloc.bar_time, color=color.yellow, style=label.style_circle, size=size.tiny)
 
     if show_lines
-        line.new(bar_index, entry, bar_index+5, entry, color=color.gray)
-        line.new(bar_index, sl, bar_index+5, sl, color=color.red)
-        line.new(bar_index, tp, bar_index+5, tp, color=color.blue)
-        box.new(bar_index[1], high[1], bar_index+5, low[1], border_color=color.red, bgcolor=color.new(color.red, 90)) // OB Box
+        line.new(time, entry, line_end_time, entry, xloc=xloc.bar_time, color=color.gray, style=line.style_dotted)
+        line.new(time, sl, line_end_time, sl, xloc=xloc.bar_time, color=color.red, width=2)
+        line.new(time, tp1, line_end_time, tp1, xloc=xloc.bar_time, color=color.blue, width=2)
+        line.new(time, tp2, line_end_time, tp2, xloc=xloc.bar_time, color=color.blue, width=2)
+        label.new(line_end_time, tp1, "TP1", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
+        label.new(line_end_time, tp2, "TP2", xloc=xloc.bar_time, style=label.style_label_left, color=color.blue, textcolor=color.white, size=size.tiny)
+
+// ==========================================
+// 6. MTF DASHBOARD
+// ==========================================
+if show_mtf
+    d_trend_up = d_c > d_ema
+    w_trend_up = w_c > w_ema
+    
+    var tbl_mtf = table.new(table_pos, 2, 3, frame_color=color.gray, frame_width=1, border_width=1, border_color=color.gray, bgcolor=color.new(color.black, 80))
+    
+    if barstate.islast
+        table.cell(tbl_mtf, 0, 0, "MTF Trend", text_color=color.white, text_size=size.small)
+        table.cell(tbl_mtf, 1, 0, "(EMA 200)", text_color=color.gray, text_size=size.small)
+        
+        d_col = d_trend_up ? color.green : color.red
+        d_txt = d_trend_up ? "BULL" : "BEAR"
+        table.cell(tbl_mtf, 0, 1, "Daily", text_color=color.white, text_size=size.small, text_halign=text.align_left)
+        table.cell(tbl_mtf, 1, 1, d_txt, text_color=d_col, text_size=size.small, bgcolor=color.new(d_col, 90))
+        
+        w_col = w_trend_up ? color.green : color.red
+        w_txt = w_trend_up ? "BULL" : "BEAR"
+        table.cell(tbl_mtf, 0, 2, "Weekly", text_color=color.white, text_size=size.small, text_halign=text.align_left)
+        table.cell(tbl_mtf, 1, 2, w_txt, text_color=w_col, text_size=size.small, bgcolor=color.new(w_col, 90))
