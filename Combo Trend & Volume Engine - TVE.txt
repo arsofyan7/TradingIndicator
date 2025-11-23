@@ -1,0 +1,83 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © SofyanGo
+
+//@version=5
+indicator("Combo: Trend & Volume Engine", shorttitle="Combo TVE", overlay=false)
+
+// ==========================================
+// 1. INPUT SETTING
+// ==========================================
+grp_macd = "MACD Settings"
+fast_len = input.int(12, "Fast Length", group=grp_macd)
+slow_len = input.int(26, "Slow Length", group=grp_macd)
+sig_len  = input.int(9, "Signal Length", group=grp_macd)
+
+grp_vol  = "Volume Settings"
+vol_len  = input.int(20, "Volume MA Length", group=grp_vol)
+vol_mul  = input.float(1.0, "Volume Threshold", group=grp_vol, tooltip="Batas volume dianggap 'High'. 1.0 = diatas rata-rata.")
+
+// ==========================================
+// 2. CALCULATION
+// ==========================================
+
+// A. MACD Calculation
+[macdLine, signalLine, histLine] = ta.macd(close, fast_len, slow_len, sig_len)
+
+// B. Volume Calculation
+vol_avg = ta.sma(volume, vol_len)
+// Cek apakah volume candle ini lebih besar dari rata-rata?
+is_high_vol = volume > (vol_avg * vol_mul)
+
+// ==========================================
+// 3. COLOR LOGIC (THE COMBO)
+// ==========================================
+// Logic: Gabungkan arah momentum histogram dengan kekuatan volume
+
+col_hist = color.gray // Default color
+
+if histLine >= 0
+    // Area Positif (Bullish)
+    if histLine > histLine[1] 
+        // Momentum Naik (Batang makin tinggi)
+        // Kalau Volume Tinggi = Hijau Terang (Strong Buy Power)
+        // Kalau Volume Rendah = Hijau Pudar (Weak Buy Power)
+        col_hist := is_high_vol ? color.new(#00E676, 0) : color.new(#00E676, 60)
+    else 
+        // Momentum Melemah (Batang makin pendek)
+        col_hist := color.new(#B9F6CA, 40)
+else
+    // Area Negatif (Bearish)
+    if histLine < histLine[1] 
+        // Momentum Turun (Batang makin dalam)
+        // Kalau Volume Tinggi = Merah Terang (Strong Dump)
+        // Kalau Volume Rendah = Merah Pudar (Weak Dump)
+        col_hist := is_high_vol ? color.new(#FF5252, 0) : color.new(#FF5252, 60)
+    else 
+        // Momentum Melemah (Batang makin pendek mendekati 0)
+        col_hist := color.new(#FF8A80, 40)
+
+// ==========================================
+// 4. PLOTTING
+// ==========================================
+
+// Plot Histogram Warna-warni
+plot(histLine, title="Trend Volume Hist", color=col_hist, style=plot.style_columns)
+
+// Plot Garis MACD standar
+plot(macdLine, title="MACD Line", color=color.blue, linewidth=1)
+plot(signalLine, title="Signal Line", color=color.orange, linewidth=1)
+
+// Plot Zero Line
+hline(0, "Zero Line", color=color.gray)
+
+// ==========================================
+// 5. SIGNALS (PAKEM USER)
+// ==========================================
+
+// Golden Cross di Bawah 0 (Sesuai request)
+gc_cond = ta.crossover(macdLine, signalLine) and macdLine < 0
+plotshape(gc_cond, title="Golden Cross < 0", style=shape.labelup, location=location.bottom, color=color.yellow, text="GC", textcolor=color.black, size=size.tiny)
+
+// Dead Cross di Atas 0 (Sinyal hati-hati)
+dc_cond = ta.crossunder(macdLine, signalLine) and macdLine > 0
+plotshape(dc_cond, title="Dead Cross > 0", style=shape.labeldown, location=location.top, color=color.gray, text="DC", textcolor=color.white, size=size.tiny)

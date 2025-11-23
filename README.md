@@ -38,21 +38,28 @@ Indikator *all-in-one* untuk menangkap momen pembalikan arah (reversal) di pucuk
 
 ---
 
-### 2. [Nama Indikator Berikutnya] - v1.0
-*(Coming Soon - Deskripsi singkat indikator kedua)*
+### 2. Combo: Trend & Volume Engine (TVE) 
+Indikator Oscillator (Panel Bawah) yang menggabungkan analisis Tren (MACD) dengan analisis Arus Dana (Volume) dalam satu tampilan visual.
 
 #### a. Fitur Utama
-* Fitur 1...
-* Fitur 2...
+* **4-Color Histogram:** Membedakan tren yang didukung volume besar (Valid) dengan tren volume kecil (Fake).
+    * *Hijau Solid:* Bullish + High Volume (Strong Momentum).
+    * *Hijau Pudar:* Bullish + Low Volume (Weak Momentum).
+    * *Merah Solid:* Bearish + High Volume (Strong Dumping).
+    * *Merah Pudar:* Bearish + Low Volume (Weak Dumping).
+* **Golden Cross Hunter:** Memberikan label "GC" khusus saat MACD melakukan *crossover* di area negatif (area diskon), sesuai pakem *Buy on Weakness*.
+* **Simplified View:** Menghilangkan kebutuhan untuk memasang indikator Volume terpisah yang sering memakan tempat di layar HP.
 
-#### b. Cara Penggunaan
-1.  Langkah 1...
-2.  Langkah 2...
+#### b. Cara Penggunaan (Kombinasi dengan Swing Reversal)
+1.  Tunggu sinyal **BUY** dari indikator utama (Chart Atas).
+2.  Konfirmasi dengan melihat ke bawah (Combo TVE):
+    * Apakah muncul label **GC**? (Nilai Plus).
+    * Apakah Histogram berwarna **Hijau Solid**? (Wajib).
+3.  Jika sinyal atas BUY tapi Histogram bawah cuma "Hijau Pudar" atau malah merah, sebaiknya kurangi porsi lot atau *wait and see*.
 
 #### c. Panduan Setting
-* **Setting A:** Penjelasan...
-* **Setting B:** Penjelasan...
-
+* **Volume Threshold:** (Default: 1.0). Batas toleransi volume. Naikkan ke 1.5 jika ingin filter "High Volume" yang lebih ketat (hanya volume meledak yang dianggap valid).
+* **MACD Settings:** Default (12, 26, 9). Bisa disesuaikan dengan preferensi trading masing-masing.
 ---
 
 ## 🛠️ Cara Instalasi (Global)
