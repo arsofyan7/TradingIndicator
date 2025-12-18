@@ -30,7 +30,7 @@ mtf_pos_in = input.string("Top Right", "Posisi Matrix", options=["Top Right", "T
 // [FITUR BARU V1.4] TRAILING STOP
 grp_trail  = "Trailing Stop (Runner)"
 show_trail = input.bool(true, "Show Trailing Line", group=grp_trail, tooltip="Garis pengaman profit. Exit jika Close di bawah garis ini.")
-atr_mult   = input.float(2.0, "Trailing Sensitivity", step=0.5, group=grp_trail, tooltip="Makin kecil makin ketat (mudah kena hit). Makin besar makin longgar (bisa nangkep trend panjang).")
+atr_mult   = input.float(3.0, "Trailing Sensitivity", step=0.5, group=grp_trail, tooltip="Makin kecil makin ketat (mudah kena hit). Makin besar makin longgar (bisa nangkep trend panjang).")
 
 size_mapping = switch lbl_size_input
     "Tiny"   => size.tiny
@@ -56,6 +56,8 @@ table_pos = switch mtf_pos_in
 // 3. CORE LOGIC
 // ==========================================
 rsi_val = ta.rsi(close, 14)
+// [NEW LOGIC] Kita ambil RSI candle sebelumnya (RSI[1]) untuk validasi start lari
+rsi_prev = rsi_val[1]
 
 hi_swing = ta.highest(high, sw_period)
 lo_swing = ta.lowest(low, sw_period)
@@ -69,11 +71,11 @@ bool rsi_buy_pass  = true
 bool rsi_sell_pass = true
 
 if rsi_mode == "Moderate (<50 / >50)"
-    rsi_buy_pass  := rsi_val < 50
-    rsi_sell_pass := rsi_val > 50
+    rsi_buy_pass  := rsi_prev < 50
+    rsi_sell_pass := rsi_prev > 50
 else if rsi_mode == "Sniper (<30 / >70)"
-    rsi_buy_pass  := rsi_val < 30
-    rsi_sell_pass := rsi_val > 70
+    rsi_buy_pass  := rsi_prev < 30
+    rsi_sell_pass := rsi_prev > 70
 
 show_buy_dir  = (trade_dir == "Both" or trade_dir == "Buy Only")
 show_sell_dir = (trade_dir == "Both" or trade_dir == "Sell Only")
@@ -148,7 +150,7 @@ if final_buy
                  "\nTP1: " + str.tostring(tp1, format.mintick) + 
                  "\nTP2: " + str.tostring(tp2, format.mintick) + 
                  "\nSL: " + str.tostring(sl, format.mintick) +
-                 "\n(RSI: " + str.tostring(rsi_val, "#.##") + ")"
+                 "\n(RSI Prev: " + str.tostring(rsi_prev, "#.##") + ")"
     
     label.new(time, na, text=label_text, xloc=xloc.bar_time, yloc=yloc.belowbar, color=color.green, textcolor=color.white, style=label.style_label_up, size=size_mapping)
     label.new(time, entry, xloc=xloc.bar_time, color=color.yellow, style=label.style_circle, size=size.tiny)
@@ -176,7 +178,7 @@ if final_sell
                  "\nTP1: " + str.tostring(tp1, format.mintick) + 
                  "\nTP2: " + str.tostring(tp2, format.mintick) + 
                  "\nSL: " + str.tostring(sl, format.mintick) +
-                 "\n(RSI: " + str.tostring(rsi_val, "#.##") + ")"
+                 "\n(RSI Prev: " + str.tostring(rsi_prev, "#.##") + ")"
 
     label.new(time, na, text=label_text, xloc=xloc.bar_time, yloc=yloc.abovebar, color=color.red, textcolor=color.white, style=label.style_label_down, size=size_mapping)
     label.new(time, entry, xloc=xloc.bar_time, color=color.yellow, style=label.style_circle, size=size.tiny)
