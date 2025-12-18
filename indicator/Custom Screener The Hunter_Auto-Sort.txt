@@ -2,7 +2,7 @@
 // © SofyanGo
 
 //@version=5
-indicator("Custom Screener: The Hunter v1.2 (Auto-Sort)", overlay=true)
+indicator("Custom Screener: The Hunter v1.3 (Auto-Sort + V-Shape Logic)", overlay=true)
 
 // ==========================================
 // 1. INPUT WATCHLIST (40 SLOT - LQ45 MIX)
@@ -58,13 +58,15 @@ s39 = input.symbol("IDX:TOWR", "39. TOWR", group=g_others)
 s40 = input.symbol("IDX:JSMR", "40. JSMR", group=g_others)
 
 // ==========================================
-// 2. CORE LOGIC FUNCTION
+// 2. CORE LOGIC FUNCTION (UPDATED V1.3)
 // ==========================================
 f_engine() =>
-    // A. RSI
-    rsi = ta.rsi(close, 14)
+    // A. RSI (LOGIC BARU: V-SHAPE HUNTER)
+    rsi_now  = ta.rsi(close, 14) // RSI Sekarang
+    rsi_prev = rsi_now[1]        // RSI Candle Kemarin (Ini Kuncinya!)
     
     // B. Swing Reversal 
+    // Logic: Pivot Low + Breakout High Kemarin
     is_reversal = (close > open and low < low[1] and close > close[1]) or (close > high[1])
     
     // C. Combo TVE
@@ -72,15 +74,12 @@ f_engine() =>
     vol_avg = ta.sma(volume, 20)
     is_high_vol = volume > vol_avg
     
-    // D. Status Check
-    bool signal_buy = is_reversal and rsi < 50
+    // D. Status Check (UPDATED)
+    // Sekarang syaratnya: RSI KEMARIN < 50
+    bool signal_buy = is_reversal and rsi_prev < 50
     bool trend_up   = macdLine > sigLine
     
     // Logic Scoring (Untuk Sorting)
-    // 3 = BUY (Strong)
-    // 2 = WEAK (Buy but Low Vol)
-    // 1 = HOLD
-    // 0 = WAIT
     int score = 0
     string o_txt = "WAIT"
     color  o_col = color.gray
@@ -94,13 +93,14 @@ f_engine() =>
         if is_high_vol
             score := 3
             o_txt := "BUY"
-            o_col := color.green
+            o_col := color.green // Hijau Neon
         else
             score := 2
             o_txt := "WEAK"
             o_col := color.olive
         
-    [o_txt, o_col, rsi, close, is_high_vol, score]
+    // Return rsi_prev (biar yang ditampilin di tabel itu RSI acuan sinyal)
+    [o_txt, o_col, rsi_prev, close, is_high_vol, score]
 
 // ==========================================
 // 3. FETCH & PUSH DATA
@@ -111,7 +111,7 @@ a_col   = array.new_color(0)
 a_rsi   = array.new_float(0)
 a_price = array.new_float(0)
 a_vol   = array.new_bool(0)
-a_score = array.new_int(0) // Array Score Baru
+a_score = array.new_int(0)
 
 f_push(_s, _t, _c, _r, _p, _v, _sc) =>
     if str.length(_s) > 0
@@ -167,7 +167,7 @@ f_push(s19, t19, c19, r19, p19, v19, sc19)
 [t20, c20, r20, p20, v20, sc20] = request.security(s20, timeframe.period, f_engine(), ignore_invalid_symbol=true)
 f_push(s20, t20, c20, r20, p20, v20, sc20)
 [t21, c21, r21, p21, v21, sc21] = request.security(s21, timeframe.period, f_engine(), ignore_invalid_symbol=true)
-f_push(s21, t21, c21, r21, p21, v21, sc21)
+f_push(s21, t21, c11, r21, p21, v21, sc21)
 [t22, c22, r22, p22, v22, sc22] = request.security(s22, timeframe.period, f_engine(), ignore_invalid_symbol=true)
 f_push(s22, t22, c22, r22, p22, v22, sc22)
 [t23, c23, r23, p23, v23, sc23] = request.security(s23, timeframe.period, f_engine(), ignore_invalid_symbol=true)
@@ -212,47 +212,35 @@ f_push(s40, t40, c40, r40, p40, v40, sc40)
 // ==========================================
 // 4. SORTING LOGIC (BUBBLE SORT DESCENDING)
 // ==========================================
-// Kita urutkan berdasarkan Skor: BUY(3) > WEAK(2) > HOLD(1) > WAIT(0)
-
 len = array.size(a_score)
 if len > 1
     for i = 0 to len - 2
         for j = 0 to len - 2 - i
-            // Cek jika Score item sekarang lebih KECIL dari item berikutnya
             if array.get(a_score, j) < array.get(a_score, j + 1)
-                // SWAP SEMUA ARRAY BERSAMAAN
-                
-                // 1. Score
                 t_sc = array.get(a_score, j)
                 array.set(a_score, j, array.get(a_score, j+1))
                 array.set(a_score, j+1, t_sc)
                 
-                // 2. Symbol
                 t_sym = array.get(a_sym, j)
                 array.set(a_sym, j, array.get(a_sym, j+1))
                 array.set(a_sym, j+1, t_sym)
                 
-                // 3. Text Signal
                 t_txt = array.get(a_txt, j)
                 array.set(a_txt, j, array.get(a_txt, j+1))
                 array.set(a_txt, j+1, t_txt)
                 
-                // 4. Color
                 t_col = array.get(a_col, j)
                 array.set(a_col, j, array.get(a_col, j+1))
                 array.set(a_col, j+1, t_col)
                 
-                // 5. RSI
                 t_rsi = array.get(a_rsi, j)
                 array.set(a_rsi, j, array.get(a_rsi, j+1))
                 array.set(a_rsi, j+1, t_rsi)
                 
-                // 6. Price
                 t_prc = array.get(a_price, j)
                 array.set(a_price, j, array.get(a_price, j+1))
                 array.set(a_price, j+1, t_prc)
                 
-                // 7. Vol
                 t_vol = array.get(a_vol, j)
                 array.set(a_vol, j, array.get(a_vol, j+1))
                 array.set(a_vol, j+1, t_vol)
@@ -267,10 +255,11 @@ if barstate.islast
     table.cell(tbl, 0, 0, "Ticker", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
     table.cell(tbl, 1, 0, "Price", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
     table.cell(tbl, 2, 0, "Signal", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
-    table.cell(tbl, 3, 0, "RSI", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
+    // Update Header jadi RSI(1)
+    table.cell(tbl, 3, 0, "RSI(1)", bgcolor=color.new(color.gray, 80), text_size=size.tiny) 
     table.cell(tbl, 4, 0, "Vol", bgcolor=color.new(color.gray, 80), text_size=size.tiny)
     
-    // Loop Data (Sekarang Array sudah terurut dari Skor tertinggi)
+    // Loop Data
     if array.size(a_sym) > 0
         for i = 0 to array.size(a_sym) - 1
             sym = array.get(a_sym, i)
